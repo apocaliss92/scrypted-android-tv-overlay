@@ -4,3 +4,6 @@
 [Buy me a coffee!](https://buymeacoffee.com/apocaliss92)
 
 [For requests and bugs](https://github.com/apocaliss92/scrypted-android-tv-overlay)
+
+# Usage
+Adapter for https://github.com/gugutab/TvOverlay
