@@ -43,13 +43,57 @@ export const storageSettingsDic: StorageSettingsDict<StorageSettingKeys> = {
 
 export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Notifier, Settings {
     storageSettings = new StorageSettings(this, storageSettingsDic);
+    queue: any[] = [];
+    interval: NodeJS.Timeout;
+    lastNotificationTime = 0;
 
     constructor(nativeId: string) {
         super(nativeId);
+        this.startQueueProcessor();
+    }
+
+    private startQueueProcessor(): void {
+        if (this.interval) {
+            clearInterval(this.interval);
+        }
+        
+        this.interval = setInterval(() => {
+            this.processQueue();
+        }, 1000);
+    }
+
+    private async processQueue(): Promise<void> {
+        if (this.queue.length === 0) {
+            return;
+        }
+
+        const { duration } = this.storageSettings.values;
+        const now = Date.now();
+        const durationMs = (duration || 7) * 1000;
+        
+        if (now - this.lastNotificationTime >= durationMs) {
+            const notification = this.queue.shift();
+            if (notification) {
+                await this.sendNotificationInternal(notification);
+                this.lastNotificationTime = now;
+            }
+        }
+    }
+
+    private async sendNotificationInternal(notificationData: any): Promise<void> {
+        const { serverUrl } = this.storageSettings.values;
+        
+        try {
+            this.console.log(`Sending ${JSON.stringify(notificationData)} to ${serverUrl}`);
+            const res = await axios.post(serverUrl, notificationData);
+            this.console.log('Notification sent', res.data);
+        } catch (e) {
+            this.console.error('Error in sending notification', e);
+        }
     }
 
     async sendNotification(title: string, options?: NotifierOptions, media?: MediaObject | string, icon?: MediaObject | string): Promise<void> {
-        const { serverUrl, id, corner, duration, largeIcon, smallIcon, smallIconColor } = this.storageSettings.values;
+        const { id, corner, duration, largeIcon, smallIcon, smallIconColor } = this.storageSettings.values;
 
         let image: string;
         if (typeof media === 'string') {
@@ -75,15 +119,10 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
             image
         };
 
-        try {
-            const fullBody = { ...body, ...additionalProps };
-            this.console.log(`Sending ${JSON.stringify(fullBody)} to ${serverUrl}`);
-            const res = await axios.post(serverUrl, fullBody);
-
-            this.console.log('Notification sent', res.data);
-        } catch (e) {
-            this.console.error('Error in sending notification', e);
-        }
+        const fullBody = { ...body, ...additionalProps };
+        
+        this.queue.push(fullBody);
+        this.console.log(`Notification added to queue. Queue length: ${this.queue.length}`);
     }
 
     async getSettings(): Promise<Setting[]> {
