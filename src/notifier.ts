@@ -51,14 +51,14 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
     async sendNotification(title: string, options?: NotifierOptions, media?: MediaObject | string, icon?: MediaObject | string): Promise<void> {
         const { serverUrl, id, corner, duration, largeIcon, smallIcon, smallIconColor } = this.storageSettings.values;
 
-        let imageUrl: string;
-        if (typeof media === 'string')
+        let image: string;
+        if (typeof media === 'string') {
             media = await mediaManager.createMediaObjectFromUrl(media as string);
-        if (media)
-            imageUrl = await mediaManager.convertMediaObjectToUrl(media as MediaObject, 'image/jpeg');
+        }
 
-        if (!imageUrl.endsWith('.jpeg')) {
-            imageUrl += '.jpeg';
+        if (media) {
+            const bufferImage = await sdk.mediaManager.convertMediaObjectToBuffer(media, 'image/jpeg');
+            image = bufferImage?.toString('base64');
         }
 
         const additionalProps = options?.data?.androidTvOverlay ?? {};
@@ -71,7 +71,8 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
             duration,
             largeIcon,
             smallIcon,
-            smallIconColor
+            smallIconColor,
+            image
         };
 
         try {
