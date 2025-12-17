@@ -1,6 +1,6 @@
 {
    "name": "@apocaliss92/scrypted-android-tv-overlay",
-   "version": "0.0.5",
+   "version": "0.0.6",
    "description": "Android TV overlay integration for scrypted",
    "repository": {
      "type": "git",

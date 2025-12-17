@@ -1,7 +1,6 @@
 import sdk, { ScryptedDeviceBase, Notifier, Settings, NotifierOptions, MediaObject, Setting, SettingValue } from '@scrypted/sdk';
 import { StorageSettings, StorageSettingsDict } from '@scrypted/sdk/storage-settings';
 import axios from 'axios';
-const { mediaManager } = sdk;
 
 type StorageSettingKeys = 'serverUrl' | 'id' | 'smallIconColor' | 'duration' | 'corner' | 'largeIcon' | 'smallIcon';
 
@@ -92,18 +91,49 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
         }
     }
 
+    private async toBase64Image(media?: MediaObject | string): Promise<string | undefined> {
+        if (!media)
+            return undefined;
+
+        if (typeof media === 'string') {
+            const trimmed = media.trim();
+
+            if (!trimmed)
+                return undefined;
+
+            // Allow passing through icons (TvOverlay supports MDI strings).
+            if (trimmed.startsWith('mdi:'))
+                return trimmed;
+
+            // If already a data URL, extract base64 payload.
+            if (trimmed.startsWith('data:')) {
+                const commaIndex = trimmed.indexOf(',');
+                if (commaIndex !== -1)
+                    return trimmed.slice(commaIndex + 1);
+                return undefined;
+            }
+
+            // If it's a URL, fetch it locally and encode bytes to base64.
+            if (/^https?:\/\//i.test(trimmed)) {
+                const res = await axios.get<ArrayBuffer>(trimmed, {
+                    responseType: 'arraybuffer',
+                    timeout: 15_000,
+                });
+                return Buffer.from(res.data).toString('base64');
+            }
+
+            // Otherwise, assume caller provided an already-valid TvOverlay image string.
+            return trimmed;
+        }
+
+        const bufferImage = await sdk.mediaManager.convertMediaObjectToBuffer(media, 'image/jpeg');
+        return bufferImage?.toString('base64');
+    }
+
     async sendNotification(title: string, options?: NotifierOptions, media?: MediaObject | string, icon?: MediaObject | string): Promise<void> {
         const { id, corner, duration, largeIcon, smallIcon, smallIconColor } = this.storageSettings.values;
 
-        let image: string;
-        if (typeof media === 'string') {
-            media = await mediaManager.createMediaObjectFromUrl(media as string);
-        }
-
-        if (media) {
-            const bufferImage = await sdk.mediaManager.convertMediaObjectToBuffer(media, 'image/jpeg');
-            image = bufferImage?.toString('base64');
-        }
+        const image = await this.toBase64Image(media);
 
         const additionalProps = options?.data?.androidTvOverlay ?? {};
 
