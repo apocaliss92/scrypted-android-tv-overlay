@@ -1,8 +1,11 @@
 import sdk, { ScryptedDeviceBase, Notifier, Settings, NotifierOptions, MediaObject, Setting, SettingValue } from '@scrypted/sdk';
 import { StorageSettings, StorageSettingsDict } from '@scrypted/sdk/storage-settings';
 import axios from 'axios';
+import https from 'https';
 
 type StorageSettingKeys = 'serverUrl' | 'id' | 'smallIconColor' | 'duration' | 'corner' | 'largeIcon' | 'smallIcon';
+
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 export const storageSettingsDic: StorageSettingsDict<StorageSettingKeys> = {
     id: {
@@ -55,7 +58,7 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
         if (this.interval) {
             clearInterval(this.interval);
         }
-        
+
         this.interval = setInterval(() => {
             this.processQueue();
         }, 1000);
@@ -69,7 +72,7 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
         const { duration } = this.storageSettings.values;
         const now = Date.now();
         const durationMs = (duration || 7) * 1000;
-        
+
         if (now - this.lastNotificationTime >= durationMs) {
             const notification = this.queue.shift();
             if (notification) {
@@ -81,10 +84,18 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
 
     private async sendNotificationInternal(notificationData: any): Promise<void> {
         const { serverUrl } = this.storageSettings.values;
-        
+
+        if (!serverUrl?.trim()) {
+            this.console.error('Missing serverUrl setting. Cannot send notification.');
+            return;
+        }
+
         try {
             this.console.log(`Sending ${JSON.stringify(notificationData)} to ${serverUrl}`);
-            const res = await axios.post(serverUrl, notificationData);
+            const res = await axios.post(serverUrl, notificationData, {
+                httpsAgent,
+                timeout: 15_000,
+            });
             this.console.log('Notification sent', res.data);
         } catch (e) {
             this.console.error('Error in sending notification', e);
@@ -118,6 +129,7 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
                 const res = await axios.get<ArrayBuffer>(trimmed, {
                     responseType: 'arraybuffer',
                     timeout: 15_000,
+                    httpsAgent,
                 });
                 return Buffer.from(res.data).toString('base64');
             }
@@ -150,7 +162,7 @@ export class AndroidTvOverlayNotifier extends ScryptedDeviceBase implements Noti
         };
 
         const fullBody = { ...body, ...additionalProps };
-        
+
         this.queue.push(fullBody);
         this.console.log(`Notification added to queue. Queue length: ${this.queue.length}`);
     }
